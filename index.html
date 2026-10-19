@@ -1,0 +1,559 @@
+<title>Next Token Lab</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Playfair+Display:ital,wght@0,400;0,500;1,400&family=Poppins:wght@500;600;700;800&display=swap">
+<style>
+/* Layout: prompt field and temperature on top; below, a bordered panel of colored token blocks beside a ranked list of next-word candidates with right-aligned probability bars. */
+:root {
+  --bg: #FAF9F5;
+  --fg: #141413;
+  --muted: #6C6B63;
+  --line: #D9D6C9;
+  --surface: #F1EFE6;
+  --accent: var(--rainbow-03);
+  --ink: #141413;
+  --tint-mix: 55%;
+
+  --rainbow-01: #C4564A;
+  --rainbow-02: #CF6751;
+  --rainbow-03: #D97757;
+  --rainbow-04: #DF9656;
+  --rainbow-05: #E5B454;
+  --rainbow-06: #B0A758;
+  --rainbow-07: #7A9A5B;
+  --rainbow-08: #6B9086;
+  --rainbow-09: #5B86B0;
+  --rainbow-10: #6379AC;
+  --rainbow-11: #6B6BA8;
+  --rainbow-12: #836DA8;
+  --rainbow-13: #9A6FA8;
+
+  --font-display: "Poppins", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Playfair Display", Georgia, "Times New Roman", serif;
+  --font-code: "DM Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #000000;
+    --fg: #F5F4EF;
+    --muted: #A5A49C;
+    --line: #3A3A37;
+    --surface: #0F0F0E;
+    --ink: #000000;
+    --tint-mix: 100%;
+    --rainbow-01: #FF6B5E;
+    --rainbow-02: #FF7D5F;
+    --rainbow-03: #FF9068;
+    --rainbow-04: #FFAE5E;
+    --rainbow-05: #FFCB5C;
+    --rainbow-06: #D4D16A;
+    --rainbow-07: #9BCB72;
+    --rainbow-08: #7FD1BC;
+    --rainbow-09: #6FB0F0;
+    --rainbow-10: #8399F2;
+    --rainbow-11: #9490F0;
+    --rainbow-12: #B592F0;
+    --rainbow-13: #D091E0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #000000;
+  --fg: #F5F4EF;
+  --muted: #A5A49C;
+  --line: #3A3A37;
+  --surface: #0F0F0E;
+  --ink: #000000;
+  --tint-mix: 100%;
+  --rainbow-01: #FF6B5E;
+  --rainbow-02: #FF7D5F;
+  --rainbow-03: #FF9068;
+  --rainbow-04: #FFAE5E;
+  --rainbow-05: #FFCB5C;
+  --rainbow-06: #D4D16A;
+  --rainbow-07: #9BCB72;
+  --rainbow-08: #7FD1BC;
+  --rainbow-09: #6FB0F0;
+  --rainbow-10: #8399F2;
+  --rainbow-11: #9490F0;
+  --rainbow-12: #B592F0;
+  --rainbow-13: #D091E0;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 17px;
+  line-height: 1.6;
+  padding-block: 36px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: flex; flex-direction: column; gap: 32px; }
+h1 {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(34px, 7vw, 60px);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  margin: 0 0 14px;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--muted); max-width: 58ch; font-style: italic; }
+.label {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+code { font-family: var(--font-code); font-size: 0.88em; color: var(--fg); }
+:focus-visible { outline: 2px solid var(--rainbow-09); outline-offset: 2px; }
+
+/* prompt */
+.field { display: flex; flex-direction: column; gap: 10px; }
+textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+  font: 400 clamp(21px, 3.4vw, 30px)/1.4 var(--font-body);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 16px 18px;
+}
+textarea::placeholder { color: var(--muted); font-style: italic; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: 600 13px var(--font-display);
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+.chip:hover { border-color: var(--accent); }
+.ctx { margin: 0; font-size: 15px; color: var(--muted); min-height: 1.6em; }
+
+/* temperature */
+.temp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 40px; align-items: end; }
+.temp-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.temp-val { font: 800 44px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 30px; margin: 8px 0 0; }
+.scale { display: flex; justify-content: space-between; font: 400 12px var(--font-code); color: var(--muted); }
+.formula {
+  margin: 0;
+  font: 400 15px/1.5 var(--font-code);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.formula b { font-weight: 500; color: var(--accent); }
+.formula .dim { color: var(--muted); }
+
+/* stage */
+.stage { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 20px 40px; align-items: start; }
+.stage > section { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.panel {
+  border: 1px solid var(--line);
+  padding: 24px;
+  min-height: 300px;
+  max-height: 460px;
+  overflow-y: auto;
+}
+.tokens {
+  font: 800 clamp(26px, 3.4vw, 44px)/1 var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.tk { display: inline-block; padding: 0.14em 0.14em 0.08em; color: var(--ink); }
+.dots { display: inline-block; padding: 0.14em 0.1em 0.08em 0.3em; color: var(--fg); }
+
+/* candidates */
+.cands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 36%);
+  gap: 4px 16px;
+  align-items: center;
+  min-height: 60px;
+}
+.tokcell { display: flex; flex-direction: column; min-width: 0; }
+.tok {
+  font: 800 clamp(19px, 2.4vw, 26px)/1.15 var(--font-display);
+  text-transform: uppercase;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: color-mix(in srgb, var(--c) var(--tint-mix), var(--fg));
+}
+.lg { font: 400 12px/1.4 var(--font-code); color: var(--muted); font-variant-numeric: tabular-nums; }
+.pct { font: 800 clamp(19px, 2.4vw, 26px)/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: right; }
+.barcol { position: relative; align-self: stretch; min-height: 10px; }
+.fill { position: absolute; top: 0; bottom: 0; right: 0; width: 0; background: var(--c); transition: width 140ms ease-out; }
+.tick { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); opacity: 0.75; transition: right 140ms ease-out; }
+.row.rest .tok { color: var(--muted); font-weight: 600; font-size: 15px; text-transform: none; font-family: var(--font-body); font-style: italic; white-space: normal; }
+.row.rest .pct { color: var(--muted); }
+.key { margin: 6px 0 0; font-size: 14px; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+.key i { display: inline-block; width: 2px; height: 16px; background: var(--fg); opacity: 0.75; }
+
+/* stats and sampling */
+.stats { display: flex; flex-wrap: wrap; gap: 12px 40px; margin: 0; }
+.stats div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stats dt { font: 600 12px var(--font-display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.stats dd { margin: 0; font: 500 24px/1.2 var(--font-code); font-variant-numeric: tabular-nums; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.btn {
+  font: 700 15px var(--font-display);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--accent);
+  border: 0;
+  border-radius: 4px;
+  padding: 13px 22px;
+  cursor: pointer;
+}
+.btn:hover { filter: brightness(1.07); }
+.btn:active { transform: translateY(1px); }
+#sampled { color: var(--muted); min-width: 0; }
+.note { margin: 0; font-size: 15px; color: var(--muted); max-width: 70ch; border-top: 1px solid var(--line); padding-top: 18px; }
+
+@media (max-width: 760px) {
+  .temp, .stage { grid-template-columns: minmax(0, 1fr); }
+  .panel { min-height: 0; padding: 16px; }
+  .row { grid-template-columns: minmax(0, 1fr) auto; min-height: 0; padding-bottom: 6px; }
+  .barcol { grid-column: 1 / -1; height: 10px; align-self: auto; }
+}
+@media (prefers-reduced-motion: reduce) { .fill, .tick { transition: none; } .btn:active { transform: none; } }
+
+/* model loader */
+.loader { display: flex; flex-direction: column; gap: 10px; }
+.loader-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+select {
+  font: 600 14px var(--font-display);
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px 12px;
+}
+.bar { height: 8px; background: var(--surface); border: 1px solid var(--line); }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 120ms ease-out; }
+.loader.done .bar { display: none; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; filter: none; }
+</style>
+
+<main class="wrap">
+  <header>
+    <h1>Next Token Lab</h1>
+    <p class="lede">Type the start of a sentence. GPT-2 scores every token it knows as a possible next token. Move the temperature to see those scores turn into probabilities.</p>
+  </header>
+
+  <section class="loader" id="loader" aria-live="polite">
+    <div class="loader-row">
+      <label class="label" for="model">Model</label>
+      <select id="model">
+        <option value="Xenova/distilgpt2">distilgpt2 (small, roughly 90 MB)</option>
+        <option value="Xenova/gpt2">gpt2 (roughly 130 MB)</option>
+      </select>
+    </div>
+    <div class="bar"><i id="loadFill"></i></div>
+    <p class="ctx" id="loadMsg">Starting…</p>
+  </section>
+
+  <section class="field">
+    <label class="label" for="prompt">Your sentence</label>
+    <textarea id="prompt" spellcheck="false" autocomplete="off" placeholder="Start a sentence">The cat sat on the</textarea>
+    <div class="chips" id="chips"></div>
+    <p class="ctx" id="ctx" aria-live="polite"></p>
+  </section>
+
+  <section class="temp">
+    <div>
+      <div class="temp-head">
+        <label class="label" for="temp">Temperature</label>
+        <output class="temp-val" id="tempVal" for="temp">1.00</output>
+      </div>
+      <input type="range" id="temp" min="0.1" max="2" step="0.05" value="1">
+      <div class="scale"><span>0.1 sharp</span><span>1.0</span><span>2.0 flat</span></div>
+    </div>
+    <pre class="formula" id="formula" aria-live="polite"></pre>
+  </section>
+
+  <div class="stage">
+    <section>
+      <span class="label">Your sentence as tokens</span>
+      <div class="panel"><div class="tokens" id="tokens"></div></div>
+    </section>
+    <section>
+      <span class="label">Next token candidates</span>
+      <ol class="cands" id="rows"></ol>
+      <p class="key"><i></i>Tick marks the probability at temperature 1.00</p>
+    </section>
+  </div>
+
+  <dl class="stats">
+    <div><dt>Top token share</dt><dd id="sTop">0%</dd></div>
+    <div><dt>Entropy</dt><dd id="sEnt">0 bits</dd></div>
+    <div><dt>Effective choices</dt><dd id="sEff">0</dd></div>
+  </dl>
+
+  <section class="actions">
+    <button class="btn" id="sample" type="button" disabled>Sample a token</button>
+    <span id="sampled" aria-live="polite"></span>
+  </section>
+
+  <p class="note">The logits come straight from the language model’s output layer for the last token of your sentence. This page divides them by the temperature and applies softmax. Tokens are pieces of words, so a candidate may be a word, a word fragment or punctuation, and a leading space is part of the token. The model downloads from the Hugging Face Hub the first time you visit and runs entirely in your browser.</p>
+</main>
+
+<script type="module">
+import { AutoTokenizer, AutoModelForCausalLM, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1";
+
+/* Models are fetched from the Hugging Face Hub, not from this site. */
+env.allowLocalModels = false;
+
+const $ = id => document.getElementById(id);
+const SHOWN = 8;
+const MAX_TOKENS = 256;
+const PROMPTS = ["The cat sat on the", "Once upon a time", "The capital of France is", "I think the answer is", "def fibonacci(n):"];
+/* hue order chosen so neighbouring blocks never share a colour family */
+const CHIP_COLORS = [1, 7, 9, 13, 5, 3, 8, 11, 2, 6, 10, 12, 4];
+const RANK_COLORS = [13, 9, 8, 5, 3, 11, 1, 7];
+const rv = n => "var(--rainbow-" + String(n).padStart(2, "0") + ")";
+
+let tokenizer = null, model = null;
+let last = null;      /* Float32Array of logits for the next token */
+let ctxData = null;   /* { ids, strs, top, p1top, p1rest, vocab } for the current prompt */
+let loadId = 0, reqId = 0, debounce = 0;
+
+function fmtPct(p) {
+  const v = p * 100;
+  if (v < 0.01) return "<0.01%";
+  return (v >= 10 ? v.toFixed(0) : v.toFixed(2)) + "%";
+}
+function fmtLogit(l) { return (l < 0 ? "−" : "") + Math.abs(l).toFixed(2); }
+function chipText(s) {
+  const t = s.replace(/^ +/, "");
+  if (/^\n+$/.test(t) || /^\n+$/.test(s)) return "↲";
+  return t === "" ? "␣" : t;
+}
+function rowLabel(s) { return "“" + s.replace(/\n/g, "↲") + "”"; }
+
+/* indices of the k largest values, largest first */
+function topK(arr, k) {
+  const idx = [];
+  for (let i = 0; i < arr.length; i++) {
+    const v = arr[i];
+    if (idx.length < k || v > arr[idx[idx.length - 1]]) {
+      let j;
+      if (idx.length < k) { idx.push(i); j = idx.length - 1; }
+      else { idx[k - 1] = i; j = k - 1; }
+      while (j > 0 && arr[idx[j]] > arr[idx[j - 1]]) {
+        const t = idx[j]; idx[j] = idx[j - 1]; idx[j - 1] = t; j--;
+      }
+    }
+  }
+  return idx;
+}
+
+/* softmax(logit / T) over the whole vocabulary */
+function expAll(T) {
+  let max = -Infinity;
+  for (let i = 0; i < last.length; i++) if (last[i] > max) max = last[i];
+  const e = new Float64Array(last.length);
+  let sum = 0;
+  for (let i = 0; i < last.length; i++) { const x = Math.exp((last[i] - max) / T); e[i] = x; sum += x; }
+  return { e, sum };
+}
+
+/* ---------- model loading ---------- */
+function setLoad(frac, msg) {
+  $("loadFill").style.width = Math.round(frac * 100) + "%";
+  $("loadMsg").textContent = msg;
+}
+
+async function loadModel(id) {
+  const my = ++loadId;
+  tokenizer = null; model = null; last = null; ctxData = null;
+  $("loader").classList.remove("done");
+  $("sample").disabled = true;
+  clearResults("Waiting for the model to finish loading…");
+  setLoad(0, "Connecting to the Hugging Face Hub…");
+  const files = {};
+  const cb = e => {
+    if (my !== loadId) return;
+    if (e.status === "progress" && e.total) {
+      files[e.file] = { loaded: e.loaded, total: e.total };
+      let l = 0, t = 0;
+      for (const f of Object.values(files)) { l += f.loaded; t += f.total; }
+      setLoad(l / t, "Downloading " + id + ": " + (l / 1048576).toFixed(0) + " of " + (t / 1048576).toFixed(0) + " MB");
+    }
+  };
+  try {
+    const tok = await AutoTokenizer.from_pretrained(id, { progress_callback: cb });
+    const mdl = await AutoModelForCausalLM.from_pretrained(id, { dtype: "q8", progress_callback: cb });
+    if (my !== loadId) return;
+    tokenizer = tok; model = mdl;
+    $("loader").classList.add("done");
+    $("loadMsg").textContent = id + " is ready. Your browser keeps a copy, so the next visit starts faster.";
+    $("sample").disabled = false;
+    refresh();
+  } catch (err) {
+    if (my !== loadId) return;
+    setLoad(0, "Could not load " + id + ". Check your connection and reload. (" + (err && err.message ? err.message : err) + ")");
+  }
+}
+
+/* ---------- results ---------- */
+function clearResults(msg) {
+  ctxData = null;
+  $("rows").textContent = "";
+  $("tokens").textContent = "";
+  const d = document.createElement("span");
+  d.className = "dots"; d.textContent = "…";
+  $("tokens").appendChild(d);
+  $("sTop").textContent = "–"; $("sEnt").textContent = "–"; $("sEff").textContent = "–";
+  $("ctx").textContent = msg || "";
+}
+
+function buildRows(c) {
+  const rows = $("rows");
+  rows.textContent = "";
+  const make = (cls, color, label) => {
+    const li = document.createElement("li");
+    li.className = "row " + cls;
+    li.style.setProperty("--c", color);
+    li.innerHTML = '<div class="tokcell"><span class="tok"></span><span class="lg"></span></div><span class="pct"></span><div class="barcol"><i class="fill"></i><b class="tick"></b></div>';
+    li.querySelector(".tok").textContent = label;
+    rows.appendChild(li);
+  };
+  c.top.forEach((id, i) => make("", rv(RANK_COLORS[i]), rowLabel(c.topStrs[i])));
+  make("rest", "var(--muted)", "all other tokens (" + (c.vocab - SHOWN).toLocaleString("en-US") + ")");
+}
+
+function buildChips(strs) {
+  const box = $("tokens");
+  box.textContent = "";
+  strs.forEach((s, i) => {
+    const sp = document.createElement("span");
+    sp.className = "tk";
+    sp.textContent = chipText(s);
+    sp.style.background = rv(CHIP_COLORS[i % CHIP_COLORS.length]);
+    box.appendChild(sp);
+  });
+  const d = document.createElement("span");
+  d.className = "dots"; d.textContent = "…";
+  box.appendChild(d);
+}
+
+async function refresh() {
+  const my = ++reqId;
+  if (!model || !tokenizer) return;
+  const text = $("prompt").value;
+  if (!text.trim()) { clearResults("Type a few words to see the model's next-token scores."); return; }
+  try {
+    const inputs = tokenizer(text, { truncation: true, max_length: MAX_TOKENS });
+    const ids = Array.from(inputs.input_ids.data, Number);
+    const out = await model(inputs);
+    if (my !== reqId) return;
+    const dims = out.logits.dims;
+    const seq = dims[1], vocab = dims[2];
+    last = out.logits.data.slice((seq - 1) * vocab, seq * vocab);
+    if (out.logits.dispose) out.logits.dispose();
+
+    const top = topK(last, SHOWN);
+    const d1 = expAll(1);
+    const p1top = top.map(i => d1.e[i] / d1.sum);
+    const p1rest = Math.max(0, 1 - p1top.reduce((a, b) => a + b, 0));
+    const strs = ids.map(id => tokenizer.decode([id]));
+    const topStrs = top.map(i => tokenizer.decode([i]));
+    ctxData = { ids, strs, top, topStrs, p1top, p1rest, vocab };
+
+    buildChips(strs);
+    buildRows(ctxData);
+    $("ctx").innerHTML = "The model read <code>" + ids.length + (ids.length === 1 ? " token" : " tokens") + "</code>" +
+      (ids.length >= MAX_TOKENS ? " (the limit; extra text is cut off)" : "") + " and scored all " + vocab.toLocaleString("en-US") + " tokens it knows.";
+    render();
+  } catch (err) {
+    $("ctx").textContent = "Something went wrong while scoring: " + (err && err.message ? err.message : err);
+  }
+}
+
+function updateTemp() {
+  const T = parseFloat($("temp").value);
+  const Ts = T.toFixed(2);
+  $("tempVal").textContent = Ts;
+  $("formula").innerHTML = 'p(token) = softmax( logit ÷ <b>' + Ts + '</b> )\n<span class="dim">' +
+    (T < 1 ? 'below 1.0: gaps between logits grow, the top token dominates' : T > 1 ? 'above 1.0: gaps shrink, rarer tokens gain share' : 'at 1.0: probabilities match the raw model') + '</span>';
+  return T;
+}
+
+function render() {
+  const T = updateTemp();
+  if (!ctxData || !last) return;
+  const { e, sum } = expAll(T);
+  let H = 0;
+  for (let i = 0; i < e.length; i++) { const p = e[i] / sum; if (p > 1e-12) H -= p * Math.log2(p); }
+  const probs = ctxData.top.map(i => e[i] / sum);
+  const restP = Math.max(0, 1 - probs.reduce((a, b) => a + b, 0));
+  $("sTop").textContent = fmtPct(probs[0]);
+  $("sEnt").textContent = H.toFixed(2) + " bits";
+  $("sEff").textContent = Math.pow(2, H).toFixed(1);
+
+  let scale = Math.max(restP, ctxData.p1rest);
+  for (let i = 0; i < SHOWN; i++) scale = Math.max(scale, probs[i], ctxData.p1top[i]);
+
+  const lis = $("rows").children;
+  for (let i = 0; i <= SHOWN; i++) {
+    const li = lis[i];
+    if (!li) continue;
+    const rest = i === SHOWN;
+    const p = rest ? restP : probs[i];
+    const q = rest ? ctxData.p1rest : ctxData.p1top[i];
+    li.querySelector(".lg").textContent = rest ? "" : "logit " + fmtLogit(last[ctxData.top[i]]);
+    li.querySelector(".pct").textContent = fmtPct(p);
+    li.querySelector(".fill").style.width = (p / scale * 100) + "%";
+    li.querySelector(".tick").style.right = "calc(" + (q / scale * 100) + "% - 1px)";
+  }
+}
+
+function sampleToken() {
+  if (!ctxData || !last) return;
+  const T = parseFloat($("temp").value);
+  const { e, sum } = expAll(T);
+  let r = Math.random() * sum, idx = e.length - 1;
+  for (let i = 0; i < e.length; i++) { r -= e[i]; if (r <= 0) { idx = i; break; } }
+  const s = tokenizer.decode([idx]);
+  $("prompt").value += s;
+  $("sampled").innerHTML = "Sampled <code>" + s.replace(/\n/g, "↲") + "</code> at " + fmtPct(e[idx] / sum);
+  refresh();
+}
+
+/* ---------- wiring ---------- */
+PROMPTS.forEach(p => {
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "chip"; b.textContent = p;
+  b.addEventListener("click", () => { $("prompt").value = p; $("sampled").textContent = ""; refresh(); });
+  $("chips").appendChild(b);
+});
+$("prompt").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(refresh, 150); });
+$("temp").addEventListener("input", render);
+$("sample").addEventListener("click", sampleToken);
+$("model").addEventListener("change", () => loadModel($("model").value));
+updateTemp();
+clearResults("Waiting for the model to finish loading…");
+loadModel($("model").value);
+</script>
